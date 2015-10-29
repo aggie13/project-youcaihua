@@ -12,47 +12,55 @@ calendar_weeks <- function(x){as.integer(format(as.POSIXct(x),"%U"))}
 # test 
 #calendar_weeks("2015-01-15")
 
-
 #function 1 creating new date variables for train and test data
 func_dates <- function(input_table_name,new_table_name){
     new_table_name <- data.table(input_table_name)
     names(new_table_name) <- tolower(names(new_table_name))
     new_table_name$date <- as.Date(new_table_name$date,'%Y-%m-%d')
- #derive more variables
+ #derive more variables (4new variables added)
     new_table_name$year = as.data.frame(as.POSIXlt(new_table_name$date)$year + 1900)    # x$year : years since 1900
     new_table_name$month = as.data.frame(as.POSIXlt(new_table_name$date)$mon+1 )
     new_table_name$day = as.data.frame(as.POSIXlt(new_table_name$date)$mday )
     new_table_name$calendar_week = mapply(calendar_weeks,new_table_name$date)
+   # new_table_name$calendar_week = apply(as.data.frame(new_table_name$date),2,calendar_weeks)
+    
 return (new_table_name)   
 }
-    
-dt.test = func_dates(test,dt.test)
-dt.train = func_dates(train,dt.train)
-dt.train
 
+#evoke the function 1
+func_dates(test,dt.test)
+func_dates(train,dt.train)
 
+#step 3: merge dt.train and dt.store
 
-#function2 
+#convert store table to dt.store
 dt.store <- data.table(store)
 names(dt.store) <-tolower(names(dt.store))
-head(dt.train[store==2,])
-head(dt.store[store==2,])
+# head(dt.train[store==2,])
+# head(dt.store[store==2,])
+#then merge dt.traina and dt.store
+setkey(dt.train, store)  #table name and to-be-join column name
+setkey(dt.store,store)
+system.time(
+    dt.merge <- merge(dt.train, dt.store, by=c('store'))
+)
+# nrow(dt.train)
+# nrow(dt.merge)
+
+dt.merge
+
+
+#deal with NAs.
+dt.merge$monthssincecompetitionopen <- (dt.merge$year-dt.merge$competitionspenssinceyear)+(dt.merge$month-dt.merge$competitionopensincemonth)
+
+
+
+
 
 #merge store table to train table, then divide table to continues promotion stores and non continuous promotion stores
 #then create new variables: month of last promotion for sales 
 #then predict
 #important to know: promo2 since year, 2010 - this year's promotion (2012,2013-2014 )*52 then for weeks, 13 - 20 =-7
-
-setkey(dt.train, store)
-setkey(dt.store,store)
-system.time(
-    dt.merge <- merge(dt.train, dt.store, by=c('store'))
-)
-nrow(dt.train)
-nrow(dt.merge)
-#  user  system elapsed 
-#  0.018   0.002   0.022
-
 
 
 
@@ -92,19 +100,21 @@ dt.merge$years_from_comp_open <- dt.merge$year-dt.merge$competitionopensinceyear
 dt.merge$months_from_comp_open <- dt.merge$month-dt.merge$competitionopensincemonth
 dt.merge$gap_months <- dt.merge$years_from_comp_open*12 + dt.merge$months_from_comp_open
 #from first time the continuous promotion started:
-dt.merge$promotion_weeks_interval <- (dt.merge$promo2sinceyear-dt.merge$year)*52 - (dt.merge$promo2sinceweek-dt.merge$calendar_week)
+##test with one store
+dt.merge2 <- dt.merge[store==1115,]
+dt.merge2$promotion_weeks_interval <- (dt.merge2$year-dt.merge2$promo2sinceyear)*52 - (dt.merge2$calendar_week-dt.merge2$promo2sinceweek)
+dt.merge2
+str(dt.merge2)
+
+
 
 
 #bigger the gap is , lower the sales are, why??? set NAs to very big gap???
-
-
 dt.merge2 <- dt.merge[!is.na(competitionopensinceyear),]
 dt.merge3 <- dt.merge2[competitionopensinceyear>1980,]
 plot(dt.merge3$gap_months,dt.merge3$sales)
-
 new2 <- dt.merge[is.na(dt.merge$competitiondistance),]
 new1 <- dt.merge[is.na(dt.merge$competitionopensincemonth),]
-
 View(new1)
 head(new2)
 
